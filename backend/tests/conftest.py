@@ -4,12 +4,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
+# for CI to find backend module
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from main import app
 from db import Base, get_db
 from security import verify_admin 
-
-# for CI to find backend module
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 @pytest.fixture(scope="session")
 def tmp_db_path():
