@@ -290,30 +290,6 @@ def create_survey(payload: SurveyCreate, db: Session = Depends(get_db)):
     db.commit()
     return {"id": survey.id}
 
-@app.post("/admin/links", dependencies=[Depends(verify_admin)])
-def create_link(link: LinkCreate, db: Session = Depends(get_db)):
-    s = db.get(Survey, link.survey_id)
-    if not s:
-        raise HTTPException(404, "Survey not found")
-
-    # return the existing active link if present
-    existing = db.execute(
-        select(SurveyLink).where(
-            SurveyLink.survey_id == s.id,
-            SurveyLink.is_active == True
-        )
-    ).scalar_one_or_none()
-    if existing:
-        return {"token": existing.token, "url": f"/take/{existing.token}", "existing": True}
-
-    # create a new link if none exists
-    token = signer.dumps({"survey_id": s.id, "nonce": uuid.uuid4().hex})
-    row = SurveyLink(survey_id=s.id, token=token, is_active=True)
-    db.add(row)
-    db.commit()
-    return {"token": token, "url": f"/take/{token}", "existing": False}
-
-
 @app.get("/admin/surveys", dependencies=[Depends(verify_admin)])
 def list_surveys(db: Session = Depends(get_db)):
     rows = db.execute(select(Survey)).scalars().all()
@@ -425,7 +401,10 @@ def revoke_link(token: str, db: Session = Depends(get_db)):
 # ------------------------
 @app.get("/public/surveys/{token}", response_model=SurveyDetail)
 def load_public_survey(token: str, db: Session = Depends(get_db)):
-    data = signer.loads(token)
+    try:
+        data = signer.loads(token)
+    except ValueError:
+        raise HTTPException(404, "Invalid token")
     link = db.execute(select(SurveyLink).where(SurveyLink.token == token)).scalar_one_or_none()
     if not link or not link.is_active:
         raise HTTPException(404, "Link invalid or inactive")

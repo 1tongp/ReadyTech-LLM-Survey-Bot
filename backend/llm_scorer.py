@@ -47,8 +47,10 @@ def _heuristic(answer_text: str) -> tuple[Optional[float], Optional[str]]:
     if not answer_text:
         return None, None
     length = len(answer_text.strip())
-    score = max(_SCORE_MIN, min(_SCORE_MAX, (length / 200.0)))  # ~200 chars → 1.0
+    score01 = min(1.0, max(0.0, length / 200.0))     # 0-1 based on length (200 chars = full score)
+    score = score01 * _SCORE_MAX                     # scale to [0, _SCORE_MAX]
     return score, _HEURISTIC_MSG
+
 
 def score_answer(answer_text: str, guideline: str | None) -> tuple[Optional[float], Optional[str]]:
     """
@@ -60,9 +62,12 @@ def score_answer(answer_text: str, guideline: str | None) -> tuple[Optional[floa
     # No answer → nothing to score
     if not answer_text:
         return None, None
-
-    # If no key or no guideline, fall back
-    if not _client or not guideline:
+    
+    if not guideline:             
+        return None, None
+    
+    # If no key, fall back
+    if not _client:
         return _heuristic(answer_text)
 
     try:
@@ -80,10 +85,18 @@ def score_answer(answer_text: str, guideline: str | None) -> tuple[Optional[floa
             model=_MODEL,                     
             temperature=0.0,
             response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": "You are a strict grading assistant. Output only valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
+        messages=[
+        {"role":"system","content":(
+            "You are a strict grader. Output ONLY JSON: "
+            '{"score": number, "rationale": string}. '
+            "The score MUST be a real number in [0,5]. "
+            "Use 0 for off-topic/empty/contradictory answers; "
+            "≈1 for poor; ≈3 for partial; ≈4 for good; 5 for perfect and fully aligned."
+            "If the answer does not meet the guideline at all, you MUST use 0 or 1."
+        )},
+        {"role":"user","content": prompt}
+        ],
+
         )
 
         content = resp.choices[0].message.content
