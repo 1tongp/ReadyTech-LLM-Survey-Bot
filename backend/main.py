@@ -16,6 +16,8 @@ import hmac
 import hashlib
 import base64
 
+import pandas as pd
+from llm_scorer import score_answer, extract_references
 class URLSafeSerializer:
     def __init__(self, secret_key, salt=""):
         self.secret_key = (secret_key or "").encode("utf-8")
@@ -45,9 +47,6 @@ class URLSafeSerializer:
         if not hmac.compare_digest(sig, expected):
             raise ValueError("Invalid signature")
         return json.loads(payload.decode("utf-8"))
-
-import pandas as pd
-from llm_scorer import score_answer
 
 Base.metadata.create_all(bind=engine)
 
@@ -84,6 +83,16 @@ Base.metadata.create_all(bind=engine)
 
 # migrate_guidelines_to_question_level()
 
+def ensure_reference_columns():
+    with engine.connect() as conn:
+        cols = conn.exec_driver_sql("PRAGMA table_info('answers')").all()
+        names = {c[1] for c in cols}
+        if "referenced_question_ids" not in names:
+            conn.exec_driver_sql("ALTER TABLE answers ADD COLUMN referenced_question_ids TEXT")
+        if "reference_warning" not in names:
+            conn.exec_driver_sql("ALTER TABLE answers ADD COLUMN reference_warning TEXT")
+ensure_reference_columns()
+
 
 # --- scoring low_quality helper ---
 LOW_QUALITY_THRESHOLD_5 = float(os.getenv("LOW_QUALITY_THRESHOLD_5", "2.0"))
@@ -104,6 +113,140 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def get_question_text_map(db: Session, survey_id: int) -> dict[int, str]:
+    qs = db.execute(
+        select(Question).where(Question.survey_id==survey_id).order_by(Question.order_index)
+    ).scalars().all()
+    # map visible numbers (order_index+1) -> text
+    return {q.order_index + 1: q.text for q in qs}
+
+def build_scoring_text(answer_text: str, respondent_id: int, referenced_numbers: list[int], db: Session, survey_id: int) -> str:
+    """
+    Build a single text blob that includes the primary answer plus any referenced answers.
+    The LLM will grade the primary answer considering the referenced parts.
+    """
+    sections = [f"PRIMARY ANSWER:\n{answer_text.strip()}"]
+    if referenced_numbers:
+        # Map visible numbers -> actual question rows
+        qs = db.execute(
+            select(Question).where(Question.survey_id==survey_id).order_by(Question.order_index)
+        ).scalars().all()
+        num_to_qid = {q.order_index+1: q.id for q in qs}
+        # pull respondent's answers to those questions
+        for num in referenced_numbers:
+            qid = num_to_qid.get(num)
+            if not qid:
+                continue
+            arow = db.execute(
+                select(Answer).where(Answer.respondent_id==respondent_id, Answer.question_id==qid)
+            ).scalar_one_or_none()
+            if arow and (arow.answer_text or "").strip():
+                sections.append(f"REFERENCED ANSWER Q{num}:\n{arow.answer_text.strip()}")
+            else:
+                sections.append(f"REFERENCED ANSWER Q{num}: <no answer>")
+    return "\n\n".join(sections)
+
+def store_refs_on_row(row: Answer, referenced_numbers: list[int], db: Session, survey_id: int) -> None:
+    """Persist referenced question IDs (DB ids, not numbers) as JSON."""
+    qs = db.execute(
+        select(Question).where(Question.survey_id==survey_id).order_by(Question.order_index)
+    ).scalars().all()
+    num_to_qid = {q.order_index+1: q.id for q in qs}
+    db_ids = [num_to_qid[n] for n in referenced_numbers if n in num_to_qid]
+    row.referenced_question_ids = json.dumps(db_ids) if db_ids else None
+
+def rescore_dependents_of(question_id: int, respondent_id: int, db: Session) -> None:
+    """
+    Re-score all answers by this respondent that *currently* reference `question_id`,
+    even if they used relative phrases ("previous/next/last/first") and did not have
+    stored reference IDs yet. After detection, persist resolved refs for future runs.
+    """
+    # Survey / numbering context
+    q_target = db.get(Question, question_id)
+    if not q_target:
+        return
+    survey_id = q_target.survey_id
+
+    # Precompute numbering maps for this survey
+    qs = db.execute(
+        select(Question).where(Question.survey_id == survey_id).order_by(Question.order_index)
+    ).scalars().all()
+    qid_to_num = {q.id: q.order_index + 1 for q in qs}
+    num_to_qid = {q.order_index + 1: q.id for q in qs}
+    qmap = {q.order_index + 1: q.text for q in qs}
+    total = len(qs)
+    target_num = qid_to_num.get(question_id)
+
+    # Walk all answers from this respondent *in this survey*
+    rows = db.execute(
+        select(Answer)
+        .join(Question, Answer.question_id == Question.id)
+        .where(Answer.respondent_id == respondent_id, Question.survey_id == survey_id)
+    ).scalars().all()
+
+    for dep in rows:
+        # Skip the row being edited itself
+        if dep.question_id == question_id:
+            continue
+
+        # If we already have stored refs, check first
+        hits_stored = False
+        if dep.referenced_question_ids:
+            try:
+                ids = set(json.loads(dep.referenced_question_ids))
+                if question_id in ids:
+                    hits_stored = True
+                # Clean up any stale ids not in this survey (rare)
+                ids = {i for i in ids if i in qid_to_num}
+            except Exception:
+                ids = set()
+        else:
+            ids = set()
+
+        # If stored refs don't indicate a dependency, re-detect now using relative logic
+        if not hits_stored:
+            dep_num = qid_to_num.get(dep.question_id)
+            ref_nums, _warn = extract_references(
+                dep.answer_text or "",
+                qmap,
+                current_number=dep_num,
+                total_questions=total,
+            )
+            resolved_ids = {num_to_qid[n] for n in ref_nums if n in num_to_qid}
+            # Persist for next time (acts as a cache)
+            dep.referenced_question_ids = json.dumps(sorted(resolved_ids)) if resolved_ids else None
+            hits_stored = question_id in resolved_ids
+
+        # If this dependent actually references the edited question → rebuild context & rescore
+        if hits_stored:
+            gl = db.execute(select(Guideline).where(Guideline.question_id == dep.question_id)).scalar_one_or_none()
+
+            # Build context from current refs (ensure up-to-date)
+            # Prefer the just-computed mapping if present; else reload from stored
+            if dep.referenced_question_ids:
+                try:
+                    cur_ref_ids = [int(x) for x in json.loads(dep.referenced_question_ids)]
+                except Exception:
+                    cur_ref_ids = []
+            else:
+                cur_ref_ids = []
+
+            # map ids→numbers for build_scoring_text
+            ref_nums_now = [qid_to_num[i] for i in cur_ref_ids if i in qid_to_num]
+
+            context_text = build_scoring_text(dep.answer_text or "", respondent_id, ref_nums_now, db, survey_id)
+            new_score, new_rationale = score_answer(context_text, gl.content if gl else None)
+            dep.score = new_score
+            dep.rationale = new_rationale
+            try:
+                dep.low_quality = compute_low_quality(new_score)
+            except NameError:
+                pass
+
+    db.commit()
+
 
 # Utility: token generator (stable but opaque); links can be revoked later
 secret = os.getenv("LINK_SECRET", "dev-secret")
@@ -320,22 +463,46 @@ def create_respondent(r: RespondentCreate, db: Session = Depends(get_db)):
 # ------------------------
 @app.post("/public/answers")
 def create_answer(a: AnswerCreate, db: Session = Depends(get_db)):
-    # Optional LLM scoring (stubbed):
-    # fetch question guideline directly
-    gl = db.execute(
-        select(Guideline).where(Guideline.question_id == (a.question_id if 'a' in locals() else row.question_id))
-    ).scalar_one_or_none()
-    score, rationale = score_answer(
-        (a.answer_text if 'a' in locals() else row.answer_text) or "",
-        gl.content if gl else None
+    # lookup survey_id for this question
+    qrow = db.get(Question, a.question_id)
+    if not qrow:
+        raise HTTPException(404, "Question not found")
+    survey_id = qrow.survey_id
+
+    # detect references against this survey's questions
+    qmap = get_question_text_map(db, survey_id)
+    ref_nums, warn = extract_references(a.answer_text or "", qmap)
+
+    # build scoring context
+    gl = db.execute(select(Guideline).where(Guideline.question_id == a.question_id)).scalar_one_or_none()
+    context_text = build_scoring_text(a.answer_text or "", a.respondent_id, ref_nums, db, survey_id)
+    score, rationale = score_answer(context_text, gl.content if gl else None)
+    low_quality = compute_low_quality(score) if 'compute_low_quality' in globals() else False
+
+    row = Answer(
+        respondent_id=a.respondent_id,
+        question_id=a.question_id,
+        answer_text=a.answer_text,
+        flagged=a.flagged,
+        score=score,
+        rationale=rationale,
+        low_quality=low_quality,
+        reference_warning=warn or None,
     )
+    db.add(row)
+    db.flush()  # to get row.id for storing refs
+    store_refs_on_row(row, ref_nums, db, survey_id)
+    db.commit()
 
-    low_quality = compute_low_quality(score)
+    return {
+        "id": row.id,
+        "score": score,
+        "rationale": rationale,
+        "low_quality": low_quality,
+        "reference_warning": row.reference_warning,
+        "referenced_question_ids": row.referenced_question_ids,
+    }
 
-    row = Answer(respondent_id=a.respondent_id, question_id=a.question_id,
-                answer_text=a.answer_text, flagged=a.flagged, score=score, rationale=rationale, low_quality=low_quality)
-    db.add(row); db.commit()
-    return {"id": row.id, "score": score, "rationale": rationale, "low_quality": low_quality}
 
 @app.put("/public/answers/{answer_id}")
 def update_answer(answer_id: int, a: AnswerUpdate, db: Session = Depends(get_db)):
@@ -343,34 +510,46 @@ def update_answer(answer_id: int, a: AnswerUpdate, db: Session = Depends(get_db)
     if not row:
         raise HTTPException(404, "Answer not found")
 
-    # apply updates
     if a.answer_text is not None:
         row.answer_text = a.answer_text
     if a.flagged is not None:
         row.flagged = a.flagged
 
-    # re-score using the guideline of this question
-    gl = db.execute(
-        select(Guideline).where(Guideline.question_id == row.question_id)
-    ).scalar_one_or_none()
+    # survey for this question
+    qrow = db.get(Question, row.question_id)
+    survey_id = qrow.survey_id
 
-    score, rationale = score_answer(row.answer_text or "", gl.content if gl else None)
+    # detect references again
+    qmap = get_question_text_map(db, survey_id)
+    ref_nums, warn = extract_references(row.answer_text or "", qmap)
+
+    # build scoring context + score
+    gl = db.execute(select(Guideline).where(Guideline.question_id == row.question_id)).scalar_one_or_none()
+    context_text = build_scoring_text(row.answer_text or "", row.respondent_id, ref_nums, db, survey_id)
+    score, rationale = score_answer(context_text, gl.content if gl else None)
     row.score = score
     row.rationale = rationale
-
+    row.reference_warning = warn or None
     try:
-        row.low_quality = compute_low_quality(score) 
+        row.low_quality = compute_low_quality(score)
     except NameError:
         pass
-
+    store_refs_on_row(row, ref_nums, db, survey_id)
     db.commit()
+
+    # cascade: any answers referencing THIS question must be rescored
+    rescore_dependents_of(question_id=row.question_id, respondent_id=row.respondent_id, db=db)
+
     return {
         "ok": True,
         "score": row.score,
         "rationale": row.rationale,
         "low_quality": getattr(row, "low_quality", False),
+        "reference_warning": row.reference_warning,
+        "referenced_question_ids": row.referenced_question_ids,
         "flagged": row.flagged,
     }
+
 
 @app.delete("/public/answers/{answer_id}")
 def delete_answer(answer_id: int, db: Session = Depends(get_db)):

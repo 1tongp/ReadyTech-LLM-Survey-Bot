@@ -61,3 +61,5 @@ class Answer(Base):
     low_quality = Column(Boolean, default=False)
     respondent = relationship("Respondent", back_populates="answers")
     question = relationship("Question", back_populates="answers")
+    referenced_question_ids = Column(Text, nullable=True)
+    reference_warning = Column(Text, nullable=True)

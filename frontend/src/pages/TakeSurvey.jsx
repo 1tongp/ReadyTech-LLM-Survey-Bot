@@ -42,6 +42,9 @@ export default function TakeSurvey(){
     return map
   }, [answers])
 
+  const currentAnswer = currentQuestion ? answeredMap.get(currentQuestion.id) : null
+  const isFlagged = !!currentAnswer?.flagged
+
   const reloadAnswers = async()=>{
     if (!respondentId) return
     const {data} = await api.get(`/public/respondents/${respondentId}/answers`)
@@ -49,24 +52,31 @@ export default function TakeSurvey(){
   }
   useEffect(()=>{ reloadAnswers() },[respondentId])
 
-  const save = async(values, flagged=false)=>{
+  const save = async(values, flagAction=null)=>{
     const existing = answeredMap.get(currentQuestion.id)
     if (existing){
-      const { data } = await api.put(`/public/answers/${existing.id}`, { answer_text: values.answer, flagged })
+      const payload = { answer_text: values.answer }
+      if (flagAction !== null) payload.flagged = flagAction
+      const { data } = await api.put(`/public/answers/${existing.id}`, payload)
       if (data?.low_quality) {
         message.warning('This answer scored low. Consider adding details or aligning with the guideline.')
       }
     }else{
-      const { data } = await api.post('/public/answers', {
-        respondent_id: respondentId, question_id: currentQuestion.id,
-        answer_text: values.answer, flagged
-      })
+        const payload = {
+        respondent_id: respondentId,
+        question_id: currentQuestion.id,
+        answer_text: values.answer,
+      }
+      if (flagAction !== null) payload.flagged = flagAction
+      const { data } = await api.post('/public/answers', payload)
       if (data?.low_quality) {
         message.warning('This answer scored low. Consider improving it before submitting.')
       }
     }
     await reloadAnswers()
-    message.success(flagged ? 'Flagged & saved' : 'Saved')
+    if (flagAction === true) message.success('Flagged')
+    else if (flagAction === false) message.success('Unflagged')
+    else message.success('Saved')
   }
 
   const del = async()=>{
@@ -143,7 +153,7 @@ export default function TakeSurvey(){
 
       <Card title={`Question ${current+1} of ${questions.length}`}>
         <Typography.Paragraph>{currentQuestion?.text}</Typography.Paragraph>
-        <Form form={form} layout="vertical" onFinish={(v)=>save(v,false)}>
+        <Form form={form} layout="vertical" onFinish={(v)=>save(v,null)}> 
           <Form.Item name="answer" rules={[{required:true, message:'Please enter your answer'}]}>
             <Input.TextArea rows={6} placeholder="Type your answer here..."/>
           </Form.Item>
@@ -151,7 +161,7 @@ export default function TakeSurvey(){
             <Button onClick={()=>setCurrent(Math.max(0, current-1))} disabled={current===0}>Previous</Button>
             <Button onClick={()=>setCurrent(Math.min(questions.length-1, current+1))} disabled={current===questions.length-1}>Next</Button>
             <Button type="primary" htmlType="submit">Save</Button>
-            <Button onClick={()=>save(form.getFieldsValue(), true)}>Flag</Button>
+            <Button onClick={()=>save(form.getFieldsValue(), !isFlagged)}>{isFlagged ? 'Unflag' : 'Flag'}</Button>
             <Button danger onClick={del}>Delete</Button>
           </Space>
         </Form>
