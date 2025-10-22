@@ -1,10 +1,28 @@
 # Full-Stack Survey Bot (React + Ant Design, FastAPI, SQLite)
 
 A simple, professional survey system where:
-- Admin creates surveys, guidelines, and shareable links.
-- Participants answer via a tokenized link, navigate with previous/next, flag questions, edit/update/delete answers, and submit.
-- Admin views responses and exports CSV.
-- LLM based answer scorer.
+A small, production-style survey system:
+
+- **Admin**
+  - Create surveys with **per-question guidelines** (1:1 question↔guideline).
+  - Add/delete questions; deleting a question also removes its guideline and related answers.
+  - Generate a **shareable link** (token). If one already exists, the existing active token is returned.
+  - View responses and **export CSV** (sorted by respondent then question order).
+- **Participant**
+  - Open `/take/<token>` via the share link (or paste a token into the input to navigate there).
+  - Navigate **Previous/Next**, **Save**, **Flag/Unflag**, **Delete** individual answers, and **Submit**.
+  - **Edit/update** answers at any time before submitting.
+  - **Chat mode** (`/take/<token>/chat`): a simple left/right chat UI where the “bot” announces actions (saved/flagged/navigation) and shows score + rationale after saves.
+- **LLM Scoring (0–5)**
+  - Scores answers against **question-specific guidelines**.
+  - Detects “refer to previous/next/last/first question” and absolute refs (e.g. “Q2”), pulls that answer into the scoring context, and warns on non-existent refs.
+  - Auto **re-scores dependent answers** if a referenced answer is updated.
+  - **Low-quality** answers are marked (threshold configurable) and the UI nudges users to improve.
+  - Pluggable design so you can swap to a cheaper LLM later.
+- **Testing & CI**
+  - **Backend unit tests** (pytest + httpx) and **GitHub Actions CI** (runs tests, publishes coverage/JUnit).
+  - **Playwright E2E**: admin creates a survey, generates link, participant answers in form & chat modes, submit, and cleanup. Screenshots saved during the flow.
+
 
 ## Prereqs
 - Node 18+ and npm
@@ -21,24 +39,68 @@ uvicorn main:app --reload --port 8000
 ```
 OpenAPI docs: http://localhost:8000/docs
 
+---
+
 ## 2) Frontend
 ```bash
 cd ../frontend
-cp .env.sample .env # confirm VITE_API_BASE if needed
+cp .env.sample .env 
 npm install
 npm run dev
 ```
 
+---
 ## 3) Use the App
 - Visit http://localhost:5173
 - Go to **Admin** → enter your `Admin Key` (matches `ADMIN_API_KEY` in backend .env)
 - Create a survey + questions + guideline, then **Generate Shareable Link**.
 - Open `/take/<token>` to fill the survey.
 
-## Notes on LLM scoring
-- `backend/llm_scorer.py` exposes a stable `score_answer(answer_text, guideline)` interface.
-- Replace the stub with your preferred model (OpenAI/Azure/Bedrock, etc.).
-- The API automatically re-scores edited answers.
+---
+
+## 4) Testing
+
+### Backend unit tests (from `backend/`)
+```bash
+python -m pytest -q
+```
+> In CI we also generate `coverage.xml` and `pytest-report.xml`
+
+### Playwright E2E (from `frontend/`)
+
+Start the servers in two terminals:
+
+**Terminal A – backend**
+```bash
+cd backend
+export ADMIN_API_KEY=your-admin-key
+export ORIGINS=http://localhost:5173
+uvicorn main:app --port 8000
+```
+
+**Terminal B – frontend**
+```bash
+cd frontend
+export VITE_API_BASE=http://127.0.0.1:8000
+npm run build && npm run preview   # http://localhost:5173
+```
+
+**Terminal C – E2E**
+```bash
+cd frontend
+# one-time:
+npx playwright install --with-deps
+
+# run tests:
+npm run e2e:test
+
+# view the HTML report:
+npx playwright show-report
+```
+
+Screenshots from the E2E flow are saved under `frontend/e2e-screens/`.
+
+---
 
 ## Security
 - Admin endpoints require header `Admin Key`.
@@ -52,9 +114,9 @@ npm run dev
 - CSV export sorted by respondent and question order
 - CORS configurable via backend `.env`
 
-## Folder Structure
+## Folder layout
 ```
-survey-bot-react-python/
-  backend/   # FastAPI + SQLite
-  frontend/  # Vite + React + AntD
+<repo>/
+  backend/     # FastAPI + SQLite + LLM scorer + pytest
+  frontend/    # React + AntD + Vite + Playwright E2E
 ```
