@@ -8,3 +8,9 @@ pandas==2.2.3
 itsdangerous==2.2.0
 openai>=1.51.0
 python-dotenv>=1.0.1
+
+# tests
+pytest
+httpx
+pytest-asyncio
+freezegun

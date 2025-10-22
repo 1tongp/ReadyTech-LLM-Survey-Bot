@@ -1,0 +1,65 @@
+{"qid": 1, "question": "Summarize your project impact.", "guideline": "Clarity + outcomes (role, stack, challenges, measurable results).", "answer": "I led a service migration to ECS + SQS; p95 from 1.8s→620ms; 500s -84%; cost -27%.", "gold_score": 0.92}
+{"qid": 2, "question": "Summarize your project impact.", "guideline": "Clarity + outcomes.", "answer": "We did some stuff; it worked.", "gold_score": 0.35}
+
+{"qid": 3, "question": "On-call incident steps?", "guideline": "Safety first; validate with metrics; rollback; comms; RCA.", "answer": "Acknowledge, open channel, rollback recent deploy, check RED metrics, tail errors, RCA.", "gold_score": 0.88}
+{"qid": 4, "question": "On-call incident steps?", "guideline": "Safety first; validate with metrics; rollback; comms; RCA.", "answer": "Check logs maybe.", "gold_score": 0.20}
+
+{"qid": 5, "question": "Design secure upload API", "guideline": "OIDC/JWT, input limits, SSE-KMS, PII minimization, audit logs.", "answer": "Use HTTP and upload to server,", "gold_score": 0.10}
+{"qid": 6, "question": "Design secure upload API", "guideline": "OIDC/JWT, input limits, SSE-KMS, PII minimization, audit logs.", "answer": "JWT, WAF, S3 SSE-KMS, presigned PUT, retention 7y, audit trail.", "gold_score": 0.90}
+
+
+{"qid": 7, "question": "Define success metrics for a new feature launch.", "guideline": "Must include at least 2 quantifiable KPIs and baseline/target.", "answer": "Daily active users and conversion rate. Target +10% DAU and +3% CVR.", "gold_score": 0.85}
+{"qid": 8, "question": "Define success metrics for a new feature launch.", "guideline": "Must include at least 2 quantifiable KPIs and baseline/target.", "answer": "We will see how it goes. People should like it.", "gold_score": 0.15}
+
+{"qid": 9, "question": "Propose a safe data retention policy.", "guideline": "State retention durations, legal/regulatory considerations, and deletion process.", "answer": "Retain PII for 12 months; logs 90 days; auto-purge and legal hold exceptions documented.", "gold_score": 0.92}
+{"qid": 10, "question": "Propose a safe data retention policy.", "guideline": "State retention durations, legal/regulatory considerations, and deletion process.", "answer": "Keep data forever so we never lose anything.", "gold_score": 0.05}
+
+{"qid": 11, "question": "Incident postmortem outline.", "guideline": "Include timeline, root cause, customer impact, and 2+ action items with owners.", "answer": "Timeline 10:02–11:05; root cause: bad config; impact: 2% requests failed; actions: add config lint (Alice), add canary (Bob).", "gold_score": 0.9}
+{"qid": 12, "question": "Incident postmortem outline.", "guideline": "Include timeline, root cause, customer impact, and 2+ action items with owners.", "answer": "It broke; we fixed it. Same as last time.", "gold_score": 0.2}
+
+{"qid": 13, "question": "Summarize trade-offs of synchronous vs. asynchronous APIs.", "guideline": "Discuss latency, coupling, reliability/backpressure, and client complexity.", "answer": "Sync: simple, low client complexity but tight coupling and tail latency. Async: better reliability/backpressure via queues but higher client complexity.", "gold_score": 0.88}
+{"qid": 14, "question": "Summarize trade-offs of synchronous vs. asynchronous APIs.", "guideline": "Discuss latency, coupling, reliability/backpressure, and client complexity.", "answer": "Async is better. That’s it.", "gold_score": 0.1}
+
+{"qid": 15, "question": "Provide a redaction strategy for user-uploaded documents.", "guideline": "Mention PII detection, pattern rules (email, phone), human-in-the-loop for low confidence.", "answer": "Regex/email/phone detection + ML NER; confidence <0.8 routed to manual review; audit log of redactions.", "gold_score": 0.9}
+{"qid": 16, "question": "Provide a redaction strategy for user-uploaded documents.", "guideline": "Mention PII detection, pattern rules (email, phone), human-in-the-loop for low confidence.", "answer": "We won't need redaction since users trust us.", "gold_score": 0.0}
+
+{"qid": 17, "question": "Explain rate limiting strategy.", "guideline": "Cover token bucket vs. leaky bucket, per-tenant quotas, and HTTP 429 handling.", "answer": "Use token bucket per tenant, burst=100, refill=50/s; 429 with Retry-After; admin overrides for incidents.", "gold_score": 0.86}
+{"qid": 18, "question": "Explain rate limiting strategy.", "guideline": "Cover token bucket vs. leaky bucket, per-tenant quotas, and HTTP 429 handling.", "answer": "Limit users. If they hit the limit, block them forever.", "gold_score": 0.12}
+
+{"qid": 19, "question": "Security review checklist.", "guideline": "Mention secrets management (KMS), input validation, SSRF/RCE mitigations, and dependency scanning.", "answer": "Use KMS for secrets, validate inputs, block metadata IPs, use allowlists, run SCA weekly.", "gold_score": 0.9}
+{"qid": 20, "question": "Security review checklist.", "guideline": "Mention secrets management (KMS), input validation, SSRF/RCE mitigations, and dependency scanning.", "answer": "Security is important. We'll try our best.", "gold_score": 0.18}
+
+{"qid": 21, "question": "Answer with reference to the previous question.", "guideline": "If referencing previous answer, restate key points; add one extra detail.", "answer": "Same as previous question: use KMS and validation; additionally, enforce mTLS between services.", "gold_score": 0.7}
+{"qid": 22, "question": "Answer with reference to the next question.", "guideline": "Do not defer content; provide a self-contained answer. If you refer, still summarize the main points.", "answer": "See next question for details.", "gold_score": 0.1}
+
+{"qid": 23, "question": "Reference the last question.", "guideline": "If you reference the last question, ensure this answer is still understandable without external context.", "answer": "As stated in the last question: implement token bucket per-tenant; also include adaptive limits on error spikes.", "gold_score": 0.75}
+{"qid": 24, "question": "Reference a non-existent question number.", "guideline": "Do not hallucinate references. If the referenced question doesn't exist, ignore it and answer directly.", "answer": "As I explained in question 99, ... (no further content).", "gold_score": 0.05}
+
+{"qid": 25, "question": "Design a rollback plan.", "guideline": "Include detection signals, decision threshold, rollback steps, and verification after rollback.", "answer": "Detect via error rate >2% and p95 +30%; rollback last deploy; verify metrics return to baseline; run smoke tests.", "gold_score": 0.9}
+{"qid": 26, "question": "Design a rollback plan.", "guideline": "Include detection signals, decision threshold, rollback steps, and verification after rollback.", "answer": "We will think about it if something goes wrong.", "gold_score": 0.08}
+
+{"qid": 27, "question": "Privacy considerations for analytics.", "guideline": "Cover pseudonymization, aggregation thresholds (k-anonymity), and opt-out.", "answer": "Use pseudonymous IDs, aggregate with k>=50, respect user opt-out via preferences.", "gold_score": 0.88}
+{"qid": 28, "question": "Privacy considerations for analytics.", "guideline": "Cover pseudonymization, aggregation thresholds (k-anonymity), and opt-out.", "answer": "Collect everything and decide later.", "gold_score": 0.05}
+
+{"qid": 29, "question": "Design a caching strategy for a read-heavy API.", "guideline": "Mention cache key design, TTLs, cache invalidation, and cache warming.", "answer": "Cache key: userID + resourceID; TTL=5min; invalidate on updates; warm cache during off-peak hours.", "gold_score": 0.90}
+{"qid": 30, "question": "Design a caching strategy for a read-heavy API.", "guideline": "Mention cache key design, TTLs, cache invalidation, and cache warming.", "answer": "Don't use caching; always fetch fresh data.", "gold_score": 0.1}
+{"qid": 31, "question": "Describe a safe file upload architecture.", "guideline": "Require MIME/type sniffing, size limits, AV scan/sandbox, store in object storage with SSE-KMS, presigned URLs.", "answer": "Presigned PUT to S3; size limit 20MB; type sniff + AV; SSE-KMS; quarantine on suspicious files.", "gold_score": 0.92}
+{"qid": 32, "question": "Describe a safe file upload architecture.", "guideline": "Require MIME/type sniffing, size limits, AV scan/sandbox, store in object storage with SSE-KMS, presigned URLs.", "answer": "Users upload directly to our server over HTTP.", "gold_score": 0.05}
+
+{"qid": 33, "question": "Summarize lessons learned from a failed experiment.", "guideline": "Include hypothesis, experiment design, result vs expectation, and next steps.", "answer": "Hypothesis: X improves CVR. A/B ran 2 weeks; result +0.2% (ns). Next: expand sample size, refine target cohort.", "gold_score": 0.86}
+{"qid": 34, "question": "Summarize lessons learned from a failed experiment.", "guideline": "Include hypothesis, experiment design, result vs expectation, and next steps.", "answer": "It failed; we can try again sometime.", "gold_score": 0.12}
+
+{"qid": 35, "question": "Handle personally identifiable information (PII).", "guideline": "List PII classes; minimization; access controls; audit; data subject requests.", "answer": "Collect only email and city; role-based access; audit trails; DSAR process documented in runbook.", "gold_score": 0.84}
+{"qid": 36, "question": "Handle personally identifiable information (PII).", "guideline": "List PII classes; minimization; access controls; audit; data subject requests.", "answer": "Store everything just in case; access for all engineers.", "gold_score": 0.05}
+
+{"qid": 37, "question": "Explain zero-downtime migrations.", "guideline": "Cover expand/migrate/contract, backfill, dual-write or read-compat, and rollback.", "answer": "Expand schema add nullable column; backfill job; dual-read during cutover; contract old path after verify.", "gold_score": 0.88}
+{"qid": 38, "question": "Explain zero-downtime migrations.", "guideline": "Cover expand/migrate/contract, backfill, dual-write or read-compat, and rollback.", "answer": "Run ALTER TABLE in prod at midnight.", "gold_score": 0.08}
+
+{"qid": 39, "question": "Answer referencing 'previous' without details.", "guideline": "If user says 'same as previous', restate the key points explicitly; do not just defer.", "answer": "Same as previous.", "gold_score": 0.1}
+{"qid": 40, "question": "Answer referencing 'previous' but self-contained.", "guideline": "If user says 'same as previous', restate the key points explicitly; do not just defer.", "answer": "Same as previous: use token bucket per-tenant, with 429 + Retry-After and admin overrides.", "gold_score": 0.75}
+
+{"qid": 41, "question": "Conflict with guideline.", "guideline": "Do NOT propose storing plaintext passwords; require hashing and salting (e.g., bcrypt/argon2).", "answer": "Store passwords in plaintext to make login faster.", "gold_score": 0.0}
+{"qid": 42, "question": "Empty or near-empty answer.", "guideline": "Score 0 for empty/off-topic; score 0.2~0.4 for trivial content.", "answer": "", "gold_score": 0.0}
+
+{"qid": 43, "question": "Provide monitoring KPIs for a queue system.", "guideline": "Mention lag, age, DLQ rate, throughput, consumer error rate.", "answer": "Track backlog size, message age p95, DLQ insertion rate, consume QPS, and consumer error rate.", "gold_score": 0.9}
+{"qid": 44, "question": "Provide monitoring KPIs for a queue system.", "guideline": "Mention lag, age, DLQ rate, throughput, consumer error rate.", "answer": "Monitor the system.", "gold_score": 0.1}
