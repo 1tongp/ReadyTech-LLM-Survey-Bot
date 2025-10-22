@@ -131,7 +131,7 @@ export default function Admin(){
                         style={{ flex: 1 }}
                       >
                         <Space>
-                        <Input.TextArea placeholder="Enter question text" />                     
+                        <Input.TextArea data-testid="question-field" placeholder="Enter question text" />                     
                         <Button onClick={() => remove(field.name)} danger>Delete</Button>
                         </Space>
                       </Form.Item>
@@ -140,7 +140,7 @@ export default function Admin(){
                       label="Guideline for this question"
                       name={[field.name, 'guideline']}
                     >
-                      <Input.TextArea rows={3} placeholder="Scoring rubric / hints for this question" />
+                      <Input.TextArea data-testid='guideline-field' rows={3} placeholder="Scoring rubric / hints for this question" />
                     </Form.Item>
                   </div>
                 ))}

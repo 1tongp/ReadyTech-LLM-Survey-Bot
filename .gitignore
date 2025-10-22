@@ -347,3 +347,7 @@ Thumbs.db
 **/*.log
 tmp/
 EOF
+
+# testing
+frontend/e2e-screens
+/e2e-screens

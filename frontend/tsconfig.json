@@ -1,0 +1,7 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM"],
+    "types": ["node", "vite/client", "@playwright/test"]
+  },
+  "include": ["src", "tests/e2e", "playwright.config.ts"]
+}

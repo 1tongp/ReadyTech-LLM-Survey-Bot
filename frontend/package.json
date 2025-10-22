@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e:test": "dotenv -e .env -- playwright test --headed --project=chromium"
   },
   "dependencies": {
     "antd": "^5.21.2",
@@ -16,7 +17,11 @@
     "react-router-dom": "^6.27.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^24.9.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "^17.2.3",
+    "dotenv-cli": "^10.0.0",
     "vite": "^5.4.10"
   }
 }
