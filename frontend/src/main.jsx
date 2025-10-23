@@ -1,15 +1,16 @@
+import { ConfigProvider } from 'antd'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { ConfigProvider } from 'antd'
 import { BrowserRouter } from 'react-router-dom'
+
 import App from './App'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ConfigProvider>
       <BrowserRouter>
-        <App/>
+        <App />
       </BrowserRouter>
     </ConfigProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 )

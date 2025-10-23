@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "e2e:test": "dotenv -e .env -- playwright test --headed --project=chromium"
+    "e2e:test": "dotenv -e .env -- playwright test --headed --project=chromium",
+    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --max-warnings=0",
+    "lint:fix": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "antd": "^5.21.2",
@@ -22,6 +26,13 @@
     "@vitejs/plugin-react": "^4.3.4",
     "dotenv": "^17.2.3",
     "dotenv-cli": "^10.0.0",
+    "eslint": "^9.38.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "prettier": "^3.6.2",
     "vite": "^5.4.10"
   }
 }

@@ -1,8 +1,9 @@
-import { Layout, Menu, theme } from 'antd'
-import { Routes, Route, Link, useNavigate } from 'react-router-dom'
+import { Layout, Menu } from 'antd'
+import { Routes, Route, Link } from 'react-router-dom'
+
 import Admin from './pages/Admin'
-import TakeSurvey from './pages/TakeSurvey'
 import ChatSurvey from './pages/ChatSurvey'
+import TakeSurvey from './pages/TakeSurvey'
 
 const { Header, Content, Footer } = Layout
 

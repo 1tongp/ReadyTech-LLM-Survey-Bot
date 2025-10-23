@@ -1,9 +1,22 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import {
+  Button,
+  Card,
+  Form,
+  Input,
+  List,
+  Space,
+  Steps,
+  message,
+  Typography,
+  Tag,
+  Alert,
+} from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Button, Card, Empty, Form, Input, List, Space, Steps, message, Typography, Tag, Alert } from 'antd'
+
 import api from '../api'
 
-export default function TakeSurvey(){
+export default function TakeSurvey() {
   const { token } = useParams()
   const [sp] = useSearchParams()
   const t = token || sp.get('token') || ''
@@ -14,55 +27,60 @@ export default function TakeSurvey(){
   const [form] = Form.useForm()
   const navigate = useNavigate()
   const [tokenInput, setTokenInput] = useState('')
-  const [invalid, setInvalid] = useState(false)   
+  const [invalid, setInvalid] = useState(false)
 
-  const load = async()=>{
-    try{
-      const {data} = await api.get(`/public/surveys/${t}`)
+  const load = async () => {
+    try {
+      const { data } = await api.get(`/public/surveys/${t}`)
       setMeta(data)
       const r = await api.post('/public/respondents', { link_token: t })
       setRespondentId(r.data.respondent_id)
-    }catch(e){
+    } catch (e) {
+      print(e)
       setInvalid(true)
       message.error('Invalid or inactive link')
     }
   }
 
-  useEffect(()=>{ 
+  useEffect(() => {
     setInvalid(false)
-    if(t) load() 
-  },[t])
+    if (t) load()
+  }, [t])
 
   const questions = meta?.questions || []
   const currentQuestion = questions[current]
 
-  const answeredMap = useMemo(()=>{
+  const answeredMap = useMemo(() => {
     const map = new Map()
-    answers.forEach(a=> map.set(a.question_id, a))
+    answers.forEach((a) => map.set(a.question_id, a))
     return map
   }, [answers])
 
   const currentAnswer = currentQuestion ? answeredMap.get(currentQuestion.id) : null
   const isFlagged = !!currentAnswer?.flagged
 
-  const reloadAnswers = async()=>{
+  const reloadAnswers = async () => {
     if (!respondentId) return
-    const {data} = await api.get(`/public/respondents/${respondentId}/answers`)
+    const { data } = await api.get(`/public/respondents/${respondentId}/answers`)
     setAnswers(data)
   }
-  useEffect(()=>{ reloadAnswers() },[respondentId])
+  useEffect(() => {
+    reloadAnswers()
+  }, [respondentId])
 
-  const save = async(values, flagAction=null)=>{
+  const save = async (values, flagAction = null) => {
     const existing = answeredMap.get(currentQuestion.id)
-    if (existing){
+    if (existing) {
       const payload = { answer_text: values.answer }
       if (flagAction !== null) payload.flagged = flagAction
       const { data } = await api.put(`/public/answers/${existing.id}`, payload)
       if (data?.low_quality) {
-        message.warning('This answer scored low. Consider adding details or aligning with the guideline.')
+        message.warning(
+          'This answer scored low. Consider adding details or aligning with the guideline.',
+        )
       }
-    }else{
-        const payload = {
+    } else {
+      const payload = {
         respondent_id: respondentId,
         question_id: currentQuestion.id,
         answer_text: values.answer,
@@ -79,81 +97,82 @@ export default function TakeSurvey(){
     else message.success('Saved')
   }
 
-  const del = async()=>{
+  const del = async () => {
     const existing = answeredMap.get(currentQuestion.id)
-    if (existing){
+    if (existing) {
       await api.delete(`/public/answers/${existing.id}`)
       await reloadAnswers()
       form.setFieldValue('answer', '')
     }
   }
 
-  const submitSurvey = async()=>{
+  const submitSurvey = async () => {
     await api.post('/public/submit', { respondent_id: respondentId })
     message.success('Submitted. Thank you!')
   }
 
-  useEffect(()=>{
+  useEffect(() => {
     // populate form when moving between questions
     const existing = currentQuestion ? answeredMap.get(currentQuestion.id) : null
-    form.setFieldsValue({answer: existing?.answer_text || ''})
+    form.setFieldsValue({ answer: existing?.answer_text || '' })
   }, [current, answeredMap, currentQuestion])
 
   if (!t || invalid) {
-  return (
-    <Card title="Take Survey" style={{maxWidth: 560}}>
-      {invalid && (
-        <Alert
-          type="error"
-          showIcon
-          style={{marginBottom: 16}}
-          message="Invalid or inactive link"
-          description="Please paste a valid token below, or ask the admin to regenerate a link."
+    return (
+      <Card title="Take Survey" style={{ maxWidth: 560 }}>
+        {invalid && (
+          <Alert
+            type="error"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Invalid or inactive link"
+            description="Please paste a valid token below, or ask the admin to regenerate a link."
+          />
+        )}
+        <Input
+          placeholder="Paste token here"
+          value={tokenInput}
+          onChange={(e) => setTokenInput(e.target.value.trim())}
+          onPressEnter={() => tokenInput && navigate(`/take/${tokenInput}`)}
         />
-      )}
-      <Input
-        placeholder="Paste token here"
-        value={tokenInput}
-        onChange={(e)=>setTokenInput(e.target.value.trim())}
-        onPressEnter={()=> tokenInput && navigate(`/take/${tokenInput}`)}
-      />
-      <div style={{marginTop:12}}>
-        <Space>
-          <Button
-            type="primary"
-            disabled={!tokenInput}
-            onClick={()=> navigate(`/take/${tokenInput}`)}
-          >
-            Take Survey
-          </Button>
-          <Typography.Text type="secondary">This will navigate to /take/&lt;token&gt;</Typography.Text>
-        </Space>
-      </div>
-    </Card>
+        <div style={{ marginTop: 12 }}>
+          <Space>
+            <Button
+              type="primary"
+              disabled={!tokenInput}
+              onClick={() => navigate(`/take/${tokenInput}`)}
+            >
+              Take Survey
+            </Button>
+            <Typography.Text type="secondary">
+              This will navigate to /take/&lt;token&gt;
+            </Typography.Text>
+          </Space>
+        </div>
+      </Card>
     )
   }
-
 
   if (!meta) return <Card loading title="Loading survey..."></Card>
   const linkMeta = meta?.link_meta
   const readOnly = !!linkMeta?.read_only
 
   return (
-    <Space direction="vertical" size="large" style={{width:'100%'}}>
+    <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Card title={meta.survey.title}>
         {readOnly && (
-          <Alert 
+          <Alert
             type="warning"
             showIcon
             message="This survey has ended."
             description="You can still view your answers, but editing/flagging/submit are disabled (read-only)."
-            style={{marginBottom:12}}
+            style={{ marginBottom: 12 }}
           />
-      )}
-      <Typography.Paragraph>{meta.survey.description}</Typography.Paragraph>
+        )}
+        <Typography.Paragraph>{meta.survey.description}</Typography.Paragraph>
       </Card>
 
-      <Button onClick={()=>navigate(`/take/${t}/chat`)}>Try chat mode</Button>
+      <Button onClick={() => navigate(`/take/${t}/chat`)}>Try chat mode</Button>
       <Card title={meta.survey.title}>
         <Typography.Paragraph>{meta.survey.description}</Typography.Paragraph>
         {meta.guideline?.content && (
@@ -164,60 +183,91 @@ export default function TakeSurvey(){
       </Card>
 
       <Card>
-        <Steps current={current} items={questions.map((q)=>({title: `Q${q.order_index+1}`}))}/>
+        <Steps
+          current={current}
+          items={questions.map((q) => ({ title: `Q${q.order_index + 1}` }))}
+        />
       </Card>
 
-      <Card title={`Question ${current+1} of ${questions.length}`}>
+      <Card title={`Question ${current + 1} of ${questions.length}`}>
         <Typography.Paragraph>{currentQuestion?.text}</Typography.Paragraph>
-        <Form form={form} layout="vertical" onFinish={(v)=>save(v,null)}> 
-          <Form.Item name="answer" rules={[{required:true, message:'Please enter your answer'}]}>
-            <Input.TextArea rows={6} placeholder="Type your answer here..."/>
+        <Form form={form} layout="vertical" onFinish={(v) => save(v, null)}>
+          <Form.Item
+            name="answer"
+            rules={[{ required: true, message: 'Please enter your answer' }]}
+          >
+            <Input.TextArea rows={6} placeholder="Type your answer here..." />
           </Form.Item>
           <Space>
-            <Button onClick={()=>setCurrent(Math.max(0, current-1))} disabled={current===0}>Previous</Button>
-            <Button onClick={()=>setCurrent(Math.min(questions.length-1, current+1))} disabled={current===questions.length-1}>Next</Button>
-            <Button type="primary" htmlType="submit" disabled={readOnly}>Save</Button>
-            <Button onClick={()=>save(form.getFieldsValue(), !isFlagged)} disabled={readOnly}>
+            <Button onClick={() => setCurrent(Math.max(0, current - 1))} disabled={current === 0}>
+              Previous
+            </Button>
+            <Button
+              onClick={() => setCurrent(Math.min(questions.length - 1, current + 1))}
+              disabled={current === questions.length - 1}
+            >
+              Next
+            </Button>
+            <Button type="primary" htmlType="submit" disabled={readOnly}>
+              Save
+            </Button>
+            <Button onClick={() => save(form.getFieldsValue(), !isFlagged)} disabled={readOnly}>
               {isFlagged ? 'Unflag' : 'Flag'}
             </Button>
-            <Button danger onClick={del} disabled={readOnly}>Delete</Button>
+            <Button danger onClick={del} disabled={readOnly}>
+              Delete
+            </Button>
           </Space>
         </Form>
       </Card>
 
       <Card title="Your Answers">
         <List
-          dataSource={answers.sort((a,b)=>a.question_id-b.question_id)}
-          renderItem={(a)=>{
-            const q = questions.find(q=>q.id===a.question_id)
+          dataSource={answers.sort((a, b) => a.question_id - b.question_id)}
+          renderItem={(a) => {
+            const q = questions.find((q) => q.id === a.question_id)
             return (
-              <List.Item actions={[
-              a.flagged ? <Tag color="red">Flagged</Tag> : null,
-              a.score!=null ? <Tag>Score: {a.score.toFixed(2)}</Tag> : null,
-              a.low_quality ? <Tag color="orange">Low Quality</Tag> : null
-              ]}>
-              <List.Item.Meta
-                title={<b>Q{q?.order_index+1}: {q?.text}</b>}
-                description={
-                <div>
-                  <div style={{whiteSpace:'pre-wrap'}}>{a.answer_text}</div>
-                  {a.rationale && (
-                  <div style={{marginTop: 8}}>
-                    <Typography.Text strong>Rationale:</Typography.Text>
-                    <div style={{whiteSpace:'pre-wrap', marginTop: 6, color: 'rgba(0,0,0,0.65)'}}>
-                    {a.rationale}
+              <List.Item
+                actions={[
+                  a.flagged ? <Tag color="red">Flagged</Tag> : null,
+                  a.score != null ? <Tag>Score: {a.score.toFixed(2)}</Tag> : null,
+                  a.low_quality ? <Tag color="orange">Low Quality</Tag> : null,
+                ]}
+              >
+                <List.Item.Meta
+                  title={
+                    <b>
+                      Q{q?.order_index + 1}: {q?.text}
+                    </b>
+                  }
+                  description={
+                    <div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{a.answer_text}</div>
+                      {a.rationale && (
+                        <div style={{ marginTop: 8 }}>
+                          <Typography.Text strong>Rationale:</Typography.Text>
+                          <div
+                            style={{
+                              whiteSpace: 'pre-wrap',
+                              marginTop: 6,
+                              color: 'rgba(0,0,0,0.65)',
+                            }}
+                          >
+                            {a.rationale}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  )}
-                </div>
-                }
-              />
+                  }
+                />
               </List.Item>
             )
           }}
         />
-        <div style={{marginTop:12}}>
-          <Button type="primary" onClick={submitSurvey} disabled={readOnly || answers.length===0}>Submit Survey</Button>
+        <div style={{ marginTop: 12 }}>
+          <Button type="primary" onClick={submitSurvey} disabled={readOnly || answers.length === 0}>
+            Submit Survey
+          </Button>
         </div>
       </Card>
     </Space>
