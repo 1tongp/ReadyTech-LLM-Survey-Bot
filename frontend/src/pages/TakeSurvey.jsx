@@ -14,7 +14,7 @@ export default function TakeSurvey(){
   const [form] = Form.useForm()
   const navigate = useNavigate()
   const [tokenInput, setTokenInput] = useState('')
-  const [invalid, setInvalid] = useState(false)
+  const [invalid, setInvalid] = useState(false)   
 
   const load = async()=>{
     try{
@@ -135,9 +135,24 @@ export default function TakeSurvey(){
 
 
   if (!meta) return <Card loading title="Loading survey..."></Card>
+  const linkMeta = meta?.link_meta
+  const readOnly = !!linkMeta?.read_only
 
   return (
     <Space direction="vertical" size="large" style={{width:'100%'}}>
+      <Card title={meta.survey.title}>
+        {readOnly && (
+          <Alert 
+            type="warning"
+            showIcon
+            message="This survey has ended."
+            description="You can still view your answers, but editing/flagging/submit are disabled (read-only)."
+            style={{marginBottom:12}}
+          />
+      )}
+      <Typography.Paragraph>{meta.survey.description}</Typography.Paragraph>
+      </Card>
+
       <Button onClick={()=>navigate(`/take/${t}/chat`)}>Try chat mode</Button>
       <Card title={meta.survey.title}>
         <Typography.Paragraph>{meta.survey.description}</Typography.Paragraph>
@@ -161,9 +176,11 @@ export default function TakeSurvey(){
           <Space>
             <Button onClick={()=>setCurrent(Math.max(0, current-1))} disabled={current===0}>Previous</Button>
             <Button onClick={()=>setCurrent(Math.min(questions.length-1, current+1))} disabled={current===questions.length-1}>Next</Button>
-            <Button type="primary" htmlType="submit">Save</Button>
-            <Button onClick={()=>save(form.getFieldsValue(), !isFlagged)}>{isFlagged ? 'Unflag' : 'Flag'}</Button>
-            <Button danger onClick={del}>Delete</Button>
+            <Button type="primary" htmlType="submit" disabled={readOnly}>Save</Button>
+            <Button onClick={()=>save(form.getFieldsValue(), !isFlagged)} disabled={readOnly}>
+              {isFlagged ? 'Unflag' : 'Flag'}
+            </Button>
+            <Button danger onClick={del} disabled={readOnly}>Delete</Button>
           </Space>
         </Form>
       </Card>
@@ -200,7 +217,7 @@ export default function TakeSurvey(){
           }}
         />
         <div style={{marginTop:12}}>
-          <Button type="primary" onClick={submitSurvey} disabled={answers.length===0}>Submit Survey</Button>
+          <Button type="primary" onClick={submitSurvey} disabled={readOnly || answers.length===0}>Submit Survey</Button>
         </div>
       </Card>
     </Space>

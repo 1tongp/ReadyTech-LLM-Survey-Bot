@@ -38,6 +38,7 @@ export default function ChatSurvey(){
 
   const questions = meta?.questions || []
   const currentQ = questions[idx]
+  const readOnly = !!meta?.link_meta?.read_only
 
   const answeredMap = useMemo(()=>{
     const m = new Map()
@@ -166,16 +167,17 @@ export default function ChatSurvey(){
   const flagged = !!answeredMap.get(currentQ?.id || -1)?.flagged
   const score = answeredMap.get(currentQ?.id || -1)?.score
   const lowq = !!answeredMap.get(currentQ?.id || -1)?.low_quality
-
+  
   return (
     <Card
       title={meta.survey.title}
       extra={<Button onClick={()=>navigate(`/take/${token}`)}>Form mode</Button>}
       bodyStyle={{padding:0}}
     >
+      
       <div style={{padding:'12px 12px 0'}}>
         <Typography.Paragraph type="secondary" style={{marginBottom:8}}>
-          Chat mode: answer below, or use actions. I’ll reply with status and scoring.
+          Chat mode: {readOnly ? 'This survey is read-only.' : 'answer below, or use actions. I’ll reply with status and scoring.'}
         </Typography.Paragraph>
       </div>
 
@@ -223,10 +225,10 @@ export default function ChatSurvey(){
           />
           <Space wrap>
             <Button onClick={goPrev} disabled={!currentQ || idx===0}>Previous</Button>
-            <Button onClick={onSend} type="primary" loading={sending} disabled={!currentQ || !draft?.trim()}>Save</Button>
+            <Button onClick={onSend} type="primary" loading={sending} disabled={!currentQ || !draft?.trim() || readOnly}>Save</Button>
             <Button onClick={goNext} disabled={!currentQ || idx===questions.length-1}>Next</Button>
-            <Button onClick={()=>onFlagToggle(!flagged)}>{flagged ? 'Unflag' : 'Flag'}</Button>
-            <Button type="primary" onClick={onSubmitAll} disabled={!answers.length}>Submit</Button>
+            <Button onClick={()=>onFlagToggle(!flagged)} disabled={readOnly}>{flagged ? 'Unflag' : 'Flag'}</Button>
+            <Button type="primary" onClick={onSubmitAll} disabled={readOnly || !answers.length}>Submit</Button>
           </Space>
         </Space>
       </div>

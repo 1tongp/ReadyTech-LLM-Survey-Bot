@@ -4,10 +4,12 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from db import Base, engine, get_db
 from models import Survey, Question, Guideline, SurveyLink, Respondent, Answer
 from schemas import *
 from security import verify_admin
+from datetime import datetime, timedelta, timezone
 
 # Minimal URL-safe serializer fallback to avoid external dependency on itsdangerous.
 # Provides dumps(obj) -> str and loads(token) -> obj with HMAC-SHA256 signature.
@@ -50,49 +52,51 @@ class URLSafeSerializer:
 
 Base.metadata.create_all(bind=engine)
 
-# # ---- migrate survey-level guidelines → question-level (SQLite) ----
-# def migrate_guidelines_to_question_level():
-#     with engine.begin() as conn:
-#         # detect if guidelines table exists
-#         tables = [r[0] for r in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'").all()]
-#         if "guidelines" not in tables:
-#             return
-#         cols = conn.exec_driver_sql("PRAGMA table_info('guidelines')").all()
-#         col_names = {c[1] for c in cols}
-#         # If already question_id based, nothing to do
-#         if "question_id" in col_names:
-#             return
-#         # If it's old (survey_id), rebuild
-#         if "survey_id" in col_names:
-#             conn.exec_driver_sql("""
-#                 CREATE TABLE IF NOT EXISTS guidelines_new (
-#                     id INTEGER PRIMARY KEY,
-#                     question_id INTEGER NOT NULL UNIQUE REFERENCES questions(id) ON DELETE CASCADE,
-#                     content TEXT NOT NULL
-#                 )
-#             """)
-#             # For each survey guideline, copy content to all its questions
-#             conn.exec_driver_sql("""
-#                 INSERT OR IGNORE INTO guidelines_new (question_id, content)
-#                 SELECT q.id AS question_id, g.content
-#                 FROM guidelines g
-#                 JOIN questions q ON q.survey_id = g.survey_id
-#             """)
-#             conn.exec_driver_sql("DROP TABLE guidelines")
-#             conn.exec_driver_sql("ALTER TABLE guidelines_new RENAME TO guidelines")
+# Helper functions for link generation
+TOKEN_DEFAULT_DAYS = int(os.getenv("LINK_TTL_DAYS", "30")) # default link expiry in 30 days
 
-# migrate_guidelines_to_question_level()
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
-def ensure_reference_columns():
-    with engine.connect() as conn:
-        cols = conn.exec_driver_sql("PRAGMA table_info('answers')").all()
-        names = {c[1] for c in cols}
-        if "referenced_question_ids" not in names:
-            conn.exec_driver_sql("ALTER TABLE answers ADD COLUMN referenced_question_ids TEXT")
-        if "reference_warning" not in names:
-            conn.exec_driver_sql("ALTER TABLE answers ADD COLUMN reference_warning TEXT")
-ensure_reference_columns()
+def make_link_token(survey_id: int, *, scope: str = "submit", days: int | None = None) -> str:
+    """Create HMAC token with {survey_id, exp, scope}"""
+    exp = int((_now_utc() + timedelta(days=days or TOKEN_DEFAULT_DAYS)).timestamp())
+    return signer.dumps({"survey_id": survey_id, "exp": exp, "scope": scope})
 
+def load_token_with_expiry(token: str) -> tuple[dict, bool]:
+    data = signer.loads(token)  # validate signature, raise ValueError if invalid
+    exp = int(data.get("exp", 0) or 0)
+    expired = bool(exp and _now_utc().timestamp() > exp)
+    return data, expired
+
+def ensure_writable_by_respondent(respondent_id: int, db: Session) -> None:
+    # find respondent and related link → token
+    resp = db.get(Respondent, respondent_id)
+    if not resp:
+        raise HTTPException(404, "Respondent not found")
+
+    link = db.get(SurveyLink, resp.link_id)
+    if not link or not link.is_active:
+        raise HTTPException(403, "Link inactive")
+
+    try:
+        data, expired = load_token_with_expiry(link.token)
+    except ValueError:
+        raise HTTPException(403, "Link invalid")
+
+    scope = data.get("scope", "submit")
+    if expired or scope != "submit":
+        # expiry token or non submit scope will only allow read-only access
+        raise HTTPException(403, "Survey has ended. Read-only access.")
+
+def _assert_link_is_active_by_respondent(respondent_id: int, db: Session):
+    resp = db.get(Respondent, respondent_id)
+    if not resp:
+        raise HTTPException(404, "Respondent not found")
+    link = db.get(SurveyLink, resp.link_id)
+    if not link or not link.is_active:
+        # read-only mode: block mutations
+        raise HTTPException(403, "Survey link is read-only (deprecated)")
 
 # --- scoring low_quality helper ---
 LOW_QUALITY_THRESHOLD_5 = float(os.getenv("LOW_QUALITY_THRESHOLD_5", "2.0"))
@@ -293,7 +297,25 @@ def create_survey(payload: SurveyCreate, db: Session = Depends(get_db)):
 @app.get("/admin/surveys", dependencies=[Depends(verify_admin)])
 def list_surveys(db: Session = Depends(get_db)):
     rows = db.execute(select(Survey)).scalars().all()
-    return [{"id": s.id, "title": s.title, "description": s.description, "created_at": s.created_at} for s in rows]
+    out = []
+    for s in rows:
+        link = db.execute(
+            select(SurveyLink)
+            .where(SurveyLink.survey_id == s.id, SurveyLink.is_active == True)
+            .order_by(SurveyLink.created_at.desc())
+        ).scalar_one_or_none()
+        out.append({
+            "id": s.id,
+            "title": s.title,
+            "description": s.description,
+            "created_at": s.created_at,
+            "link": {
+                "token": link.token if link else None,
+                "is_active": bool(link.is_active) if link else False,
+                "scope": getattr(link, "scope", "write") if link else None,
+            } if link else None
+        })
+    return out
 
 @app.delete("/admin/surveys/{survey_id}", dependencies=[Depends(verify_admin)])
 def delete_survey(survey_id: int, db: Session = Depends(get_db)):
@@ -375,26 +397,52 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True}
 
-
 # ------------------------
-# Admin: shareable link
+# Admin: shareable link (create or reuse active)
 # ------------------------
 @app.post("/admin/links", dependencies=[Depends(verify_admin)])
 def create_link(link: LinkCreate, db: Session = Depends(get_db)):
     s = db.get(Survey, link.survey_id)
-    if not s: raise HTTPException(404, "Survey not found")
-    token = signer.dumps({"survey_id": s.id})
-    row = SurveyLink(survey_id=s.id, token=token, is_active=True)
-    db.add(row); db.commit()
-    return {"token": token, "url": f"/take/{token}"}
+    if not s:
+        raise HTTPException(404, "Survey not found")
 
+    # Reuse existing active link if present
+    existing = db.execute(
+        select(SurveyLink).where(
+            SurveyLink.survey_id == s.id,
+            SurveyLink.is_active == True
+        )
+    ).scalar_one_or_none()
+    if existing:
+        return {"token": existing.token, "url": f"/take/{existing.token}", "existing": True}
+
+    # Create a new active link with a random nonce to ensure uniqueness
+    # and avoid token collisions on re-activation.
+    for _ in range(5):  # tiny retry loop (extremely unlikely to need)
+        token = signer.dumps({"survey_id": s.id, "nonce": uuid.uuid4().hex})
+        row = SurveyLink(survey_id=s.id, token=token, is_active=True)
+        db.add(row)
+        try:
+            db.commit()
+            return {"token": token, "url": f"/take/{token}", "existing": False}
+        except IntegrityError:
+            db.rollback()
+            # token collision (very unlikely). retry with a new nonce
+            continue
+
+    # If we somehow failed multiple times, surface an error
+    raise HTTPException(500, "Failed to generate a unique link token")
+
+# revoke
 @app.post("/admin/links/{token}/revoke", dependencies=[Depends(verify_admin)])
 def revoke_link(token: str, db: Session = Depends(get_db)):
     row = db.execute(select(SurveyLink).where(SurveyLink.token==token)).scalar_one_or_none()
-    if not row: raise HTTPException(404, "Link not found")
+    if not row:
+        raise HTTPException(404, "Link not found")
     row.is_active = False
     db.commit()
     return {"ok": True}
+
 
 # ------------------------
 # Public: load survey by token
@@ -402,16 +450,19 @@ def revoke_link(token: str, db: Session = Depends(get_db)):
 @app.get("/public/surveys/{token}", response_model=SurveyDetail)
 def load_public_survey(token: str, db: Session = Depends(get_db)):
     try:
-        data = signer.loads(token)
+        data, expired = load_token_with_expiry(token)
     except ValueError:
-        raise HTTPException(404, "Invalid token")
+        raise HTTPException(404, "Link invalid")
+
     link = db.execute(select(SurveyLink).where(SurveyLink.token == token)).scalar_one_or_none()
     if not link or not link.is_active:
         raise HTTPException(404, "Link invalid or inactive")
+
     s = db.get(Survey, data["survey_id"])
     qs = db.execute(
         select(Question).where(Question.survey_id == s.id).order_by(Question.order_index)
     ).scalars().all()
+
     out_qs = []
     for q in qs:
         g = q.guideline.content if q.guideline else None
@@ -422,7 +473,22 @@ def load_public_survey(token: str, db: Session = Depends(get_db)):
             "type": q.type,
             "guideline": {"content": g} if g else None
         })
-    return {"survey": {"id": s.id, "title": s.title, "description": s.description}, "questions": out_qs}
+
+    # return read_only info or expiry details for UI
+    scope = data.get("scope", "submit")
+    exp = int(data.get("exp", 0) or 0)
+    read_only = expired or scope != "submit"
+
+    return {
+        "survey": {"id": s.id, "title": s.title, "description": s.description},
+        "questions": out_qs,
+        "link_meta": {
+            "scope": scope,
+            "expired": expired,
+            "read_only": read_only,
+            "expires_at": exp,
+        }
+    }
 
 
 # ------------------------
@@ -431,7 +497,7 @@ def load_public_survey(token: str, db: Session = Depends(get_db)):
 @app.post("/public/respondents")
 def create_respondent(r: RespondentCreate, db: Session = Depends(get_db)):
     link = db.execute(select(SurveyLink).where(SurveyLink.token==r.link_token)).scalar_one_or_none()
-    if not link or not link.is_active:
+    if not link:
         raise HTTPException(400, "Invalid link")
     resp = Respondent(link_id=link.id, display_name=r.display_name or None, status="in_progress")
     db.add(resp); db.commit()
@@ -442,6 +508,7 @@ def create_respondent(r: RespondentCreate, db: Session = Depends(get_db)):
 # ------------------------
 @app.post("/public/answers")
 def create_answer(a: AnswerCreate, db: Session = Depends(get_db)):
+    _assert_link_is_active_by_respondent(a.respondent_id, db)
     # lookup survey_id for this question
     qrow = db.get(Question, a.question_id)
     if not qrow:
@@ -488,7 +555,8 @@ def update_answer(answer_id: int, a: AnswerUpdate, db: Session = Depends(get_db)
     row = db.get(Answer, answer_id)
     if not row:
         raise HTTPException(404, "Answer not found")
-
+    _assert_link_is_active_by_respondent(row.respondent_id, db)
+    
     if a.answer_text is not None:
         row.answer_text = a.answer_text
     if a.flagged is not None:
@@ -534,6 +602,7 @@ def update_answer(answer_id: int, a: AnswerUpdate, db: Session = Depends(get_db)
 def delete_answer(answer_id: int, db: Session = Depends(get_db)):
     row = db.get(Answer, answer_id)
     if not row: raise HTTPException(404, "Answer not found")
+    _assert_link_is_active_by_respondent(row.respondent_id, db)
     db.delete(row); db.commit()
     return {"ok": True}
 
@@ -547,6 +616,7 @@ def list_answers(respondent_id: int, db: Session = Depends(get_db)):
 
 @app.post("/public/submit")
 def submit_survey(s: SubmitSurvey, db: Session = Depends(get_db)):
+    _assert_link_is_active_by_respondent(s.respondent_id, db)
     resp = db.get(Respondent, s.respondent_id)
     if not resp: raise HTTPException(404, "Respondent not found")
     # Ensure at least one answer exists

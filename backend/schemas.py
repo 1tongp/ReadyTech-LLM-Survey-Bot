@@ -1,6 +1,6 @@
 # schemas.py
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 class QuestionCreate(BaseModel):
     text: str
@@ -38,6 +38,8 @@ class SurveyDetail(BaseModel):
 
 class LinkCreate(BaseModel):
     survey_id: int
+    expires_in_days: int | None = None   
+    scope: Literal["submit","read"] | None = None 
 
 class RespondentCreate(BaseModel):
     link_token: str

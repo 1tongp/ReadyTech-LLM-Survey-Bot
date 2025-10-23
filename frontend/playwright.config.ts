@@ -12,6 +12,7 @@ export default defineConfig({
         trace: 'on-first-retry',
         video: 'off',
         screenshot: 'only-on-failure',
+        launchOptions: { slowMo: 400 }
     },
     webServer: {
         command: 'npm run preview',

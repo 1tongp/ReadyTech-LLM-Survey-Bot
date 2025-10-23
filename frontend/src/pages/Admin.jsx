@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button, Card, Form, Input, Space, Table, message, Modal, List, Typography, Divider } from 'antd'
 import api, { setAdminKey } from '../api'
 
@@ -10,7 +10,7 @@ export default function Admin(){
   const [form] = Form.useForm()
   const [qForm] = Form.useForm()
 
-  const load = async()=>{
+  const load = async ()=>{
     const {data} = await api.get('/admin/surveys')
     setSurveys(data)
     if (selectedId){
@@ -23,63 +23,130 @@ export default function Admin(){
   useEffect(()=>{ if(selectedId){ load() } },[selectedId])
 
   const columns = [
-    {title:'ID', dataIndex:'id', width:60},
-    {title:'Title', dataIndex:'title'},
-    {title:'Created', dataIndex:'created_at'},
-    {title:'Actions', render:(_,row)=> <Space>
-        <Button onClick={()=>setSelectedId(row.id)}>Open</Button>
-        <Button danger onClick={async()=>{ await api.delete(`/admin/surveys/${row.id}`); message.success('Deleted'); load();}}>Delete</Button>
-      </Space>}
+    { title:'ID', dataIndex:'id', width:60 },
+    { title:'Title', dataIndex:'title' },
+    { title:'Created', dataIndex:'created_at' },
+    {
+      title: 'Status',
+      render: (_, row) => {
+        const active = row.link?.is_active
+        return active
+          ? <span style={{color:'#389e0d'}}>Active</span>
+          : <span style={{color:'#d4380d'}}>Deprecated</span>
+      }
+    },
+    {
+      title: 'Link Action',
+      render: (_, row) => {
+        const L = row.link
+        if (L?.is_active) {
+          return (
+            <Button danger onClick={()=>{
+              Modal.confirm({
+                title: 'Deprecate this link?',
+                content: 'Participants will no longer be able to edit/submit (read-only).',
+                okType: 'danger',
+                onOk: async ()=>{
+                  await api.post(`/admin/links/${L.token}/revoke`)
+                  message.success('Deprecated')
+                  await load()
+                }
+              })
+            }}>Deprecate</Button>
+          )
+        }
+        return (
+          <Button onClick={async()=>{
+            await api.post('/admin/links', { survey_id: row.id })
+            message.success('Re-activated')
+            await load()
+          }}>Re-activate</Button>
+        )
+      }
+    },
+    {
+      title:'Actions',
+      render: (_, row) => (
+        <Space>
+          <Button onClick={()=>setSelectedId(row.id)}>Open</Button>
+          <Button
+            danger
+            onClick={()=> confirmDeleteSurvey(row)}
+          >
+            Delete
+          </Button>
+        </Space>
+      )
+    }
   ]
 
   const createSurvey = async (values) => {
-    // values.questions formate is [{text, guideline}, ...]
-    const qs = values.questions || [];
-
-    // 1) Create survey without guideline
+    const qs = values.questions || []
     const payload = {
       title: values.title,
       description: values.description,
       questions: qs.map((q, i) => ({ text: (q?.text ?? '').trim(), order_index: i }))
-    };
+    }
+    const res = await api.post('/admin/surveys', payload)
+    const newId = res.data.id
 
-    const res = await api.post('/admin/surveys', payload);
-    const newId = res.data.id;
+    const detailRes = await api.get(`/admin/surveys/${newId}/detail`)
+    const questionsOrdered = (detailRes.data.questions || []).sort((a, b) => a.order_index - b.order_index)
 
-    // 2) Fetch questions to get their IDs
-    const detailRes = await api.get(`/admin/surveys/${newId}/detail`);
-    const questionsOrdered = (detailRes.data.questions || []).sort((a, b) => a.order_index - b.order_index);
-
-    // 3) Update guidelines per question
     await Promise.all(
       questionsOrdered.map((q, idx) => {
-        const content = (qs[idx]?.guideline || '').trim();
-        if (!content) return null;
-        return api.put(`/admin/questions/${q.id}/guideline`, { content });
+        const content = (qs[idx]?.guideline || '').trim()
+        if (!content) return null
+        return api.put(`/admin/questions/${q.id}/guideline`, { content })
       }).filter(Boolean)
-    );
+    )
 
-    message.success('Survey created');
-    form.resetFields();
-    await load();
-  };
+    message.success('Survey created')
+    form.resetFields()
+    await load()
+  }
 
   const addQuestion = async(values)=>{
-    await api.post(`/admin/surveys/${selectedId}/questions`, {text:values.text, order_index: (detail?.questions?.length||0)})
-    qForm.resetFields(); await load()
+    await api.post(`/admin/surveys/${selectedId}/questions`, {
+      text: values.text,
+      order_index: (detail?.questions?.length || 0)
+    })
+    qForm.resetFields()
+    await load()
   }
 
+  // simple, no-expiry link creator
   const createLink = async()=>{
     const {data} = await api.post('/admin/links', {survey_id:selectedId})
-    Modal.info({title:'Shareable Link', content:(
-      <div>
-      <p>Token:</p>
-      <Typography.Text code copyable>{data.token}</Typography.Text>
-      <p>URL (frontend):</p>
-      <Typography.Text code copyable>{`${window.location.origin}/take/${data.token}`}</Typography.Text>
-      </div>
-    )})
+    Modal.info({
+      title:'Shareable Link',
+      content:(
+        <div>
+          <p>Token:</p>
+          <Typography.Text code copyable>{data.token}</Typography.Text>
+          <p style={{marginTop:8}}>URL (frontend):</p>
+          <Typography.Text code copyable>{`${window.location.origin}/take/${data.token}`}</Typography.Text>
+          <p style={{marginTop:8}}>Status: <b>Active</b></p>
+        </div>
+      ),
+    })
   }
+
+  const confirmDeleteSurvey = (row) => {
+    Modal.confirm({
+      title: `Delete survey “${row.title}”?`,
+      content: 'This will permanently remove the survey, its questions, guidelines, links, and responses. This action cannot be undone.',
+      okText: 'Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      async onOk() {
+        await api.delete(`/admin/surveys/${row.id}`)
+        message.success('Survey deleted')
+        await load()
+      },
+    })
+  }
+
 
   const exportCsv = ()=>{
     const key = api.defaults.headers['X-API-Key']
@@ -101,7 +168,7 @@ export default function Admin(){
       <div style={{marginTop:12}}>
         <Button type="primary" onClick={()=>{
           const el = document.querySelector('input[type=password]')
-          setAdminKey(el.value); setKeyVisible(false)
+          setAdminKey(el?.value || ''); setKeyVisible(false)
         }}>Continue</Button>
       </div>
     </Card>
@@ -117,6 +184,7 @@ export default function Admin(){
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3}/>
           </Form.Item>
+
           <Form.List name="questions" initialValue={[{ text: '', guideline: '' }]}>
             {(fields, { add, remove }) => (
               <div>
@@ -131,16 +199,13 @@ export default function Admin(){
                         style={{ flex: 1 }}
                       >
                         <Space>
-                        <Input.TextArea data-testid="question-field" placeholder="Enter question text" />                     
-                        <Button onClick={() => remove(field.name)} danger>Delete</Button>
+                          <Input.TextArea data-testid="question-field" placeholder="Enter question text" />
+                          <Button onClick={() => remove(field.name)} danger>Delete</Button>
                         </Space>
                       </Form.Item>
                     </Space>
-                    <Form.Item
-                      label="Guideline for this question"
-                      name={[field.name, 'guideline']}
-                    >
-                      <Input.TextArea data-testid='guideline-field' rows={3} placeholder="Scoring rubric / hints for this question" />
+                    <Form.Item label="Guideline for this question" name={[field.name, 'guideline']}>
+                      <Input.TextArea data-testid="guideline-field" rows={3} placeholder="Scoring rubric / hints for this question" />
                     </Form.Item>
                   </div>
                 ))}
@@ -192,35 +257,34 @@ export default function Admin(){
                   />
                   <div style={{marginTop:6}}>
                     <Space>
-                    <Button onClick={async()=>{
-                      const content = (q._guidelineDraft ?? q.guideline?.content ?? "").trim()
-                      await api.put(`/admin/questions/${q.id}/guideline`, { content })
-                      message.success('Guideline saved')
-                      await load()
-                    }}>
-                      Save Guideline
-                    </Button>
-                    <Button danger onClick={()=>{
-                      Modal.confirm({
-                        title: 'Delete question?',
-                        content: 'This will delete the question and its guideline. This action cannot be undone.',
-                        okText: 'Delete',
-                        okType: 'danger',
-                        onOk: async () => {
-                          try {
-                            // try to remove guideline first (ignore if not present), then delete the question
-                            await api.delete(`/admin/questions/${q.id}/guideline`).catch(()=>{})
-                            await api.delete(`/admin/questions/${q.id}`)
-                            message.success('Question deleted')
-                            await load()
-                          } catch (err) {
-                            message.error('Failed to delete question')
+                      <Button onClick={async()=>{
+                        const content = (q._guidelineDraft ?? q.guideline?.content ?? "").trim()
+                        await api.put(`/admin/questions/${q.id}/guideline`, { content })
+                        message.success('Guideline saved')
+                        await load()
+                      }}>
+                        Save Guideline
+                      </Button>
+                      <Button danger onClick={()=>{
+                        Modal.confirm({
+                          title: 'Delete question?',
+                          content: 'This will delete the question and its guideline. This action cannot be undone.',
+                          okText: 'Delete',
+                          okType: 'danger',
+                          onOk: async () => {
+                            try {
+                              await api.delete(`/admin/questions/${q.id}/guideline`).catch(()=>{})
+                              await api.delete(`/admin/questions/${q.id}`)
+                              message.success('Question deleted')
+                              await load()
+                            } catch {
+                              message.error('Failed to delete question')
+                            }
                           }
-                        }
-                      })
-                    }}>
-                      Delete Question
-                    </Button>
+                        })
+                      }}>
+                        Delete Question
+                      </Button>
                     </Space>
                   </div>
                 </div>
@@ -234,8 +298,6 @@ export default function Admin(){
             </Form.Item>
             <Form.Item><Button htmlType="submit">Add</Button></Form.Item>
           </Form>
-
-
 
           <Divider/>
           <Space>
