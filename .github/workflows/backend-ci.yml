@@ -2,15 +2,21 @@ name: backend-ci
 
 on:
   push:
+    paths-ignore:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
   pull_request:
+    paths-ignore:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      ADMIN_API_KEY: test-key # we have covered the ADMIN_API_KEY usage in tests
-      OPENAI_API_KEY: dummy # we mock the LLM calls in tests, so dummy key is fine
+      ADMIN_API_KEY: test-key # we have set up this key in the tests 
+      OPENAI_API_KEY: dummy # to avoid hitting real OpenAI during tests
     steps:
       - uses: actions/checkout@v4
 
