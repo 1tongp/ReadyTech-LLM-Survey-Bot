@@ -159,18 +159,6 @@ export default function TakeSurvey() {
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Card title={meta.survey.title}>
-        {readOnly && (
-          <Alert
-            type="warning"
-            showIcon
-            message="This survey has ended."
-            description="You can still view your answers, but editing/flagging/submit are disabled (read-only)."
-            style={{ marginBottom: 12 }}
-          />
-        )}
-        <Typography.Paragraph>{meta.survey.description}</Typography.Paragraph>
-      </Card>
 
       <Button onClick={() => navigate(`/take/${t}/chat`)}>Try chat mode</Button>
       <Card title={meta.survey.title}>

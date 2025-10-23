@@ -162,3 +162,64 @@ Screenshots from the E2E flow are saved under `frontend/e2e-screens/`.
   backend/     # FastAPI + SQLite + LLM scorer + pytest
   frontend/    # React + AntD + Vite + Playwright E2E
 ```
+-----
+
+## Demo Survey below
+
+Demo Survey
+Survey title: ReadyTech Demo
+
+Survey description: 
+```
+Describe a time you improved a process using automation or data. What was the problem, what did you do, and what was the impact?
+```
+
+Q1: 
+``` 
+Describe a time you improved a process using automation or data. What was the problem, what did you do, and what was the impact?
+```
+
+Q1 Guideline: 
+```
+5 – Excellent: Clear before/after contrast; concrete metrics (e.g., time/cost/error reduction); shows approach (tools/steps), trade-offs, and a brief reflection.
+4 – Strong: Has approach + metrics or strong qualitative impact; minor detail gaps.
+3 – Adequate: Describes action and outcome but missing metrics or not tied to business value.
+2 – Weak: Vague actions; unclear outcome; no evidence of impact.
+1 – Minimal: Mentions a tool/idea but no real scenario or result.
+0 – Off-topic/empty.
+Bonus: STAR structure, names tools, quantifies impact.
+```
+
+Q2: 
+```
+Design a simple survey bot architecture using React + Ant Design (frontend) and FastAPI + SQLite (backend). Include link-based access, per-question guidelines, LLM scoring, and CSV export.
+```
+
+Q2 Guideline:
+```
+5 – Excellent: Names key components and data model; clear API endpoints; explains LLM scoring flow (prompt, guideline context, persistence); covers security (admin key, token revocation, CORS), pagination/export, and error handling.
+4 – Strong: Covers most pieces but light on either security or scoring details.
+3 – Adequate: Mentions frontend/backend and rough endpoints; lacks model or scoring specifics.
+2 – Weak: Vague block diagram; misses core entities or flows.
+1 – Minimal: Buzzwords only.
+0 – Off-topic/empty.
+```
+
+
+
+
+
+Q1 Answer: 
+```
+Our QA regression suite took 2.5 hrs and blocked deploys. I built a Playwright smoke subset (top 30 flows) and scheduled it in CI on each PR, with flaky-test quarantine + alerts. I added a dashboard for pass rate and runtime. Result: PR checks ran in ~6 min, caught 3 critical bugs pre-merge in the first month, and weekly full regressions dropped from 2.5 hrs → 1.4 hrs—saving ~6 engineer-hours/week. Trade-off: a few edge cases moved to nightly. Lead time to prod improved by ~18%.
+```
+
+Q2 Answer:
+```
+Frontend: routes /admin, /take/:token, /take/:token/chat; components for survey table + filters, create form, detail drawer, take survey with save/next/submit, chat mode with score preview.
+Backend: models Survey, Question, Guideline, Link(token), Response, Answer(score,rationale).
+Admin endpoints (Admin-Key): create/list/detail surveys; create/revoke links; update guideline; export CSV.
+Public endpoints (token): fetch survey, start response, save answers, submit.
+Scoring: on save, call LLM with question + guideline + referenced answers; store score 0–5 and rationale; re-score dependent answers after edits.
+Security: Admin-Key for admin routes; token for public; CORS restricted; tokens revocable. Export: order by respondent then question order; stream CSV.
+```
