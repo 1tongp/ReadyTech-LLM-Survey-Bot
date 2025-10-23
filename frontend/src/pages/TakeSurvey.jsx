@@ -159,7 +159,6 @@ export default function TakeSurvey() {
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-
       <Button onClick={() => navigate(`/take/${t}/chat`)}>Try chat mode</Button>
       <Card title={meta.survey.title}>
         <Typography.Paragraph>{meta.survey.description}</Typography.Paragraph>
