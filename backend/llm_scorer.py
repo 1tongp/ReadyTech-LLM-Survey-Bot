@@ -18,29 +18,6 @@ _client = None
 if _OPENAI_API_KEY:
     _client = OpenAI(api_key=_OPENAI_API_KEY)
 
-# JSON schema for structured output
-_SCORE_SCHEMA = {
-    "name": "survey_score",
-    "schema": {
-        "type": "object",
-        "properties": {
-            "score": {
-                "type": "number",
-                "description": "A numeric score between {_SCORE_MIN} and {_SCORE_MAX} inclusive indicating how well the answer satisfies the guideline.",
-                "minimum": _SCORE_MIN,
-                "maximum": _SCORE_MAX,
-            },
-            "rationale": {
-                "type": "string",
-                "description": "A brief explanation (1-3 sentences) referencing the guideline criteria."
-            }
-        },
-        "required": ["score", "rationale"],
-        "additionalProperties": False
-    },
-    "strict": True
-}
-
 _HEURISTIC_MSG = "Heuristic fallback based on answer length (no LLM scoring)."
 
 def _heuristic(answer_text: str) -> tuple[Optional[float], Optional[str]]:

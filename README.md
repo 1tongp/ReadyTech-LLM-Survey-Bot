@@ -40,7 +40,6 @@ uvicorn main:app --reload --port 8000
 ```
 OpenAPI docs: http://localhost:8000/docs
 
----
 
 ## 2) Frontend
 ```bash
@@ -84,14 +83,13 @@ VS Code recommended settings:
 }
 ```
 
----
+
 ## 3) Use the App
 - Visit http://localhost:5173
 - Go to **Admin** → enter your `Admin Key` (matches `ADMIN_API_KEY` in backend .env)
 - Create a survey + questions + guideline, then **Generate Shareable Link**.
 - Open `/take/<token>` to fill the survey.
 
----
 
 ## 4) Testing
 
@@ -135,14 +133,20 @@ npx playwright show-report
 
 Screenshots from the E2E flow are saved under `frontend/e2e-screens/`.
 
----
+
+## 5) LLM Evaluation
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate 
+python -m eval.run_eval
+```
+
 
 ## CI
 - **backend-ci**: triggered on changes to `backend/**`; runs Python tests and uploads Coverage/JUnit.
 - **frontend-ci**: triggered on changes to `frontend/**`; runs ESLint (`npm run lint`) and Prettier check (`npm run format:check`).
 - Both workflows support manual trigger via `workflow_dispatch`.
 
----
 
 ## Security
 - Admin endpoints require header `Admin Key`.
@@ -162,7 +166,7 @@ Screenshots from the E2E flow are saved under `frontend/e2e-screens/`.
   backend/     # FastAPI + SQLite + LLM scorer + pytest
   frontend/    # React + AntD + Vite + Playwright E2E
 ```
------
+
 
 ## Demo Survey below
 
@@ -204,9 +208,6 @@ Q2 Guideline:
 1 – Minimal: Buzzwords only.
 0 – Off-topic/empty.
 ```
-
-
-
 
 
 Q1 Answer: 

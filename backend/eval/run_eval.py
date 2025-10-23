@@ -1,7 +1,8 @@
-import os, json, math, csv, re
+import os, json, math, csv
 from statistics import mean
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List
+from statistics import mean
 
 from llm_scorer import score_answer
 
@@ -88,9 +89,8 @@ def eval_one(model_name: str, envs: Dict[str, str], eval_rows: List[dict]) -> Li
 
     vals = [p for p in preds05 if p is not None]
     if vals:
-        from statistics import mean
         print(f"[{model_name}] used LLM_MODEL={os.getenv('LLM_MODEL')}; "
-              f"pred05_min={min(vals):.2f}, pred05_max={max(vals):.2f}, pred05_mean={mean(vals):.2f}")
+                f"pred05_min={min(vals):.2f}, pred05_max={max(vals):.2f}, pred05_mean={mean(vals):.2f}")
     else:
         print(f"[{model_name}] used LLM_MODEL={os.getenv('LLM_MODEL')}; no predictions")
 
