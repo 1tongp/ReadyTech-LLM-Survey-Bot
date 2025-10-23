@@ -18,10 +18,11 @@ A small, production-style survey system:
   - Detects “refer to previous/next/last/first question” and absolute refs (e.g. “Q2”), pulls that answer into the scoring context, and warns on non-existent refs.
   - Auto **re-scores dependent answers** if a referenced answer is updated.
   - **Low-quality** answers are marked (threshold configurable) and the UI nudges users to improve.
-  - Pluggable design so you can swap to a cheaper LLM later.
+  - Pluggable design so we can swap to a cheaper LLM later.
 - **Testing & CI**
   - **Backend unit tests** (pytest + httpx) and **GitHub Actions CI** (runs tests, publishes coverage/JUnit).
   - **Playwright E2E**: admin creates a survey, generates link, participant answers in form & chat modes, submit, and cleanup. Screenshots saved during the flow.
+  - **Frontend CI**: ESLint + Prettier checks on every push/PR that touches `frontend/**`.
 
 
 ## Prereqs
@@ -47,6 +48,40 @@ cd ../frontend
 cp .env.sample .env 
 npm install
 npm run dev
+```
+
+### 2.1 Code Style（ESLint & Prettier）
+The project uses **ESLint v9 (Flat Config)** + **Prettier**.
+
+Run these in `frontend/`:
+
+```bash
+# Lint (no warnings allowed)
+npm run lint
+
+# Auto-fix ESLint issues
+npm run lint:fix
+
+# Check Prettier formatting (read-only)
+npm run format:check
+
+# Write Prettier formatting changes
+npm run format
+```
+
+Configs:
+- ESLint Flat Config: `frontend/eslint.config.js` (or `eslint.config.mjs`)
+- Prettier config: `frontend/.prettierrc`
+- Ignore list: `frontend/.prettierignore`
+
+VS Code recommended settings:
+```json
+// frontend/.vscode/settings.json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": { "source.fixAll.eslint": true }
+}
 ```
 
 ---
@@ -99,6 +134,13 @@ npx playwright show-report
 ```
 
 Screenshots from the E2E flow are saved under `frontend/e2e-screens/`.
+
+---
+
+## CI
+- **backend-ci**: triggered on changes to `backend/**`; runs Python tests and uploads Coverage/JUnit.
+- **frontend-ci**: triggered on changes to `frontend/**`; runs ESLint (`npm run lint`) and Prettier check (`npm run format:check`).
+- Both workflows support manual trigger via `workflow_dispatch`.
 
 ---
 

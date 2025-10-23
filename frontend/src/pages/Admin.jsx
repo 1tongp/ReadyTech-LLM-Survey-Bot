@@ -76,9 +76,9 @@ export default function Admin() {
         case 'created_desc':
           return new Date(b.created_at || 0) - new Date(a.created_at || 0)
         case 'status_asc':
-          return (a.link?.is_active ? 0 : 1) - (b.link?.is_active ? 0 : 1)
-        case 'status_desc':
           return (b.link?.is_active ? 0 : 1) - (a.link?.is_active ? 0 : 1)
+        case 'status_desc':
+          return (a.link?.is_active ? 0 : 1) - (b.link?.is_active ? 0 : 1)
         default:
           return 0
       }
