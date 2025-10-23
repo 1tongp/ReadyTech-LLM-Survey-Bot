@@ -68,7 +68,6 @@ export default function ChatSurvey() {
     setDraft(answeredMap.get(currentQ.id)?.answer_text || '')
     botSay(`Now on Q${idx + 1}/${questions.length}.`)
     botSay(renderQuestionLine(currentQ, idx + 1, questions.length))
-     
   }, [idx])
 
   useEffect(() => {
