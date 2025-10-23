@@ -120,7 +120,7 @@ def print_and_save_report(results: Dict[str, List[dict]], eval_rows: List[dict])
         print(f"[{name}] MAE={mae}  MSE={mse}  Spearman={corr}  Coverage={coverage:.2f}")
         rows_csv.append([name, mae, mse, corr, coverage])
 
-    # 相对差异同样用 0–1 尺度
+    # use 0-1 scale for comparison
     ref_name = list(results.keys())[0]
     ref = results[ref_name]
     for name, outs in results.items():
@@ -133,7 +133,7 @@ def print_and_save_report(results: Dict[str, List[dict]], eval_rows: List[dict])
         rel = mean(diffs) if diffs else None
         print(f"[{name}] vs [{ref_name}] mean abs diff = {rel}")
 
-    # （可选）写 CSV
+    # Save summary CSV
     with open(OUT_DIR/"summary_gold.csv","w",newline="",encoding="utf-8") as f:
         csv.writer(f).writerows([header, *rows_csv])
 
